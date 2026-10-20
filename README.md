@@ -61,6 +61,45 @@ ln -s /absolute/path/to/magic-conch/skills/give-conch "${CLAUDE_CONFIG_DIR:-$HOM
 
 依據：[Claude skills 與手動限定](https://code.claude.com/docs/en/skills#control-who-invokes-a-skill)、[skill hooks 與 once](https://code.claude.com/docs/en/hooks#hooks-in-skills-and-agents)。不要用 `--disable-slash-commands`、`--restricted`、`--bare` 或 `--safe-mode` 啟動這個指令；這些模式可能限制本 skill 的發現或 hook。
 
+## 可選：用原生 Goal mode，遇到問題才問海螺
+
+這是 Codex 的另外一種用法，**不安裝 Stop hook**。由 agent 遇到問題時主動呼叫海螺；普通進度不必取答案。Goal mode 決定何時持續／完成，並不強制每次 Stop 呼叫 API。
+
+| 方式 | 手動入口 | 持續與停止依據 |
+| --- | --- | --- |
+| Claude hook 版 | `/give-conch 任務` | 非 DONE 續跑；DONE 或設定的例外停止後卸載 |
+| Codex goal 版 | `$give-conch 任務` | skill 呼叫原生 create_goal；完成後 update_goal complete |
+| 原有 Codex hook | 安裝 Stop handler，再交任務 | 依本工具 DONE／可選次數上限 |
+
+### Codex goal 版：一個手動 skill
+
+安裝到 Codex 的標準個人 skills 位置，再重新開啟 Codex：
+
+```sh
+mkdir -p ~/.agents/skills
+ln -s /absolute/path/to/magic-conch/skills/codex/give-conch ~/.agents/skills/give-conch
+```
+
+```text
+$give-conch 寫一份 note.txt，遇到選擇問題時問海螺，讀回確認內容後完成。
+```
+
+`agents/openai.yaml` 設定 `allow_implicit_invocation: false`，一般對話不會自動選用；這次手動呼叫讓 agent 使用原生 create_goal，未設定 token budget。確實完成後用 update_goal complete 結束，再正常聊天或再次手動啟用。有未完成 goal 時先處理衝突，不要默默覆蓋。原生取消／暫停使用 `/goal clear`、`/goal pause`；不要同時接本工具的常駐 Stop handler。見 [Codex skills](https://learn.chatgpt.com/docs/build-skills) 與 [原生 Goal mode](https://learn.chatgpt.com/docs/long-running-work)。
+
+保留完整 checkout 與 symlink，不覆蓋既有同名項目。移除 Codex 的 `give-conch` 安裝連結並重新開啟，可停止後續使用；已活躍 goal 另用原生 `/goal clear` 清除。
+
+### Provider 與能力界線
+
+技能使用同一支腳本的簡單入口，也可手動試問：
+
+```sh
+python3 magic_conch.py --answer
+```
+
+不讀 stdin、不接受問題內容，只做固定 GET 並輸出提示；API 失敗仍輸出固定繼續提示。shell／網路權限照常，沒有自動核准。答案只是資料，agent 自行決定如何推進。
+
+Goal 版的完成是框架狀態或 evaluator 判定；`DONE` 只是可選的回報文字。下節 `MAGIC_CONCH_MAX_CONTINUATIONS` 僅限 hook 版，**不限制 goal 的自動 turn 次數**。Goal 的阻塞、暫停、用量限制與人工中斷仍有效，不保證一定完成，也不承諾非 DONE 永遠不停止。
+
 ## 完成標記與可選上限
 
 忽略開頭空白後，只認大小寫敏感的 **`DONE`** 起首標記；後面必須接結尾、空白、標點或符號。`DONE`、`DONE: 完成`、`DONE：完成` 都有效；`done`、`Done`、`UNDONE`、`說到DONE`、`DONEish`、`DONE_soon`、`DONE完成` 都會繼續。請只在任務確實完成時使用標記。

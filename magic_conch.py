@@ -50,6 +50,19 @@ def reserve_attempt(session):
     return True
 
 
+def get_hint():
+    try:
+        raw = subprocess.run(
+            ['curl', '--fail', '--silent', '--show-error', '--max-time', '5',
+             '--max-filesize', '16384', API],
+            capture_output=True, text=True, timeout=6, check=True,
+        ).stdout
+        answer = json.loads(raw)['answer']
+        return block(answer if isinstance(answer, str) and answer.strip() else None)
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError):
+        return block()
+
+
 def respond(event):
     event = event if isinstance(event, dict) else {}
     name = event.get('hook_event_name')
@@ -65,16 +78,13 @@ def respond(event):
         return {'continue': False, 'stopReason': '神奇海螺額度設定或狀態錯誤：' + str(error)}
     if name != 'Stop' or not isinstance(message, str):
         return block()
-    raw = subprocess.run(
-        ['curl', '--fail', '--silent', '--show-error', '--max-time', '5',
-         '--max-filesize', '16384', API],
-        capture_output=True, text=True, timeout=6, check=True,
-    ).stdout
-    answer = json.loads(raw)['answer']
-    return block(answer if isinstance(answer, str) and answer.strip() else None)
+    return get_hint()
 
 
 def main():
+    if '--answer' in sys.argv[1:]:
+        print(get_hint()['reason'])
+        return 0
     try:
         event = json.load(sys.stdin)
     except (OSError, ValueError):

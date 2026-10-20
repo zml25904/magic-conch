@@ -139,6 +139,22 @@ print(os.environ.get('TEST_CURL_RESPONSE', '{"answer":"放手吧"}'))
         self.assertEqual(result.returncode, 0)
         self.assertIn('MAGIC_CONCH_MAX_CONTINUATIONS', json.loads(result.stdout)['systemMessage'])
 
+    def test_provider_needs_no_stdin_session_or_stop_budget(self):
+        self.env['MAGIC_CONCH_MAX_CONTINUATIONS'] = 'not-a-stop-budget'
+        result = subprocess.run([sys.executable, str(SCRIPT), '--answer'], input='',
+                                text=True, capture_output=True, env=self.env, timeout=10)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stderr, '')
+        self.assertTrue(result.stdout.startswith('神奇海螺的隨機答案'))
+        self.assertIn('放手吧', result.stdout)
+        self.assertFalse((self.root / 'obsolete-cache').exists())
+        self.env['TEST_CURL_FAIL'] = '1'
+        result = subprocess.run([sys.executable, str(SCRIPT), '--answer'], input='',
+                                text=True, capture_output=True, env=self.env, timeout=10)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('完成才回 DONE', result.stdout)
+        self.assertNotIn('decision', result.stdout)
+
     def test_explicit_nonstop_event_passes_without_network(self):
         self.assertEqual(self.run_hook(raw='{"hook_event_name":"Interrupt"}'), {})
         self.assertFalse((self.root / 'curl-args.json').exists())
