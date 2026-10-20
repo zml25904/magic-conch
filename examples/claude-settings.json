@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"/absolute/path/to/magic-conch/magic_conch.py\"",
+            "timeout": 8
+          }
+        ]
+      }
+    ]
+  }
+}
