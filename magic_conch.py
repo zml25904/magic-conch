@@ -83,8 +83,17 @@ def main():
         result = respond(event)
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError):
         result = block()
+    if '--claude-skill' in sys.argv[1:]:
+        # once:true retains the skill hook only when continuation exits 2.
+        if result.get('decision') == 'block':
+            print(result['reason'], file=sys.stderr)
+            return 2
+        if result.get('stopReason'):
+            print(json.dumps({'systemMessage': result['stopReason']}, ensure_ascii=False))
+        return 0
     print(json.dumps(result, ensure_ascii=False))
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

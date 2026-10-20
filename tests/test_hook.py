@@ -30,11 +30,13 @@ print(os.environ.get('TEST_CURL_RESPONSE', '{"answer":"放手吧"}'))
                         TEST_CURL_ARGS=str(self.root / 'curl-args.json'))
         self.env.pop('MAGIC_CONCH_MAX_CONTINUATIONS', None)
 
-    def run_hook(self, message='A private question without ASK?', raw=None, active=False):
+    def run_hook(self, message='A private question without ASK?', raw=None, active=False, skill=False):
         event = {'hook_event_name': 'Stop', 'session_id': 'same-session',
                  'last_assistant_message': message, 'stop_hook_active': active}
-        result = subprocess.run([sys.executable, str(SCRIPT)], input=raw if raw is not None else json.dumps(event),
+        result = subprocess.run([sys.executable, str(SCRIPT)] + (['--claude-skill'] if skill else []), input=raw if raw is not None else json.dumps(event),
                                 text=True, capture_output=True, env=self.env, timeout=10)
+        if skill:
+            return result
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, '')
         return json.loads(result.stdout)
@@ -112,6 +114,30 @@ print(os.environ.get('TEST_CURL_RESPONSE', '{"answer":"放手吧"}'))
         result = self.run_hook()
         self.assertIs(result['continue'], False)
         self.assertTrue(result['stopReason'])
+
+    def test_skill_uses_exit_two_with_stderr_until_done(self):
+        for message in ['Working', '', 'done']:
+            result = self.run_hook(message, skill=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(result.stdout, '')
+            self.assertIn('放手吧', result.stderr)
+        result = self.run_hook('DONE: finished', skill=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout + result.stderr, '')
+
+    def test_skill_fallback_retains_hook_and_budget_stop_removes_it(self):
+        self.env['TEST_CURL_FAIL'] = '1'
+        self.env['MAGIC_CONCH_MAX_CONTINUATIONS'] = '1'
+        result = self.run_hook(skill=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('完成才回 DONE', result.stderr)
+        result = self.run_hook(skill=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('續跑上限', json.loads(result.stdout)['systemMessage'])
+        self.env['MAGIC_CONCH_MAX_CONTINUATIONS'] = 'bad'
+        result = self.run_hook(skill=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('MAGIC_CONCH_MAX_CONTINUATIONS', json.loads(result.stdout)['systemMessage'])
 
     def test_explicit_nonstop_event_passes_without_network(self):
         self.assertEqual(self.run_hook(raw='{"hook_event_name":"Interrupt"}'), {})
